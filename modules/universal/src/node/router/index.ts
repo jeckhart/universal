@@ -1,5 +1,6 @@
 import {provide} from 'angular2/core';
-import {PlatformLocation, ROUTER_PROVIDERS_COMMON} from 'angular2/router';
+import {ROUTER_PROVIDERS_COMMON} from 'angular2/router';
+import {PlatformLocation} from 'angular2/platform/common';
 
 import {NodePlatformLocation} from './node_platform_location';
 

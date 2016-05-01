@@ -1,10 +1,20 @@
 import {DOCUMENT} from 'angular2/platform/common_dom';
 import {DOM} from 'angular2/src/platform/dom/dom_adapter';
-import {NgZone, platform, ComponentRef, PlatformRef, ApplicationRef} from 'angular2/core';
+import {
+  NgZone,
+  createPlatform,
+  coreLoadAndBootstrap,
+  ReflectiveInjector,
+  ComponentRef,
+  ComponentFactory,
+  PlatformRef,
+  Type,
+  ApplicationRef
+} from 'angular2/core';
 import {Http} from 'angular2/http';
 
 
-import {buildReflector, buildNodeProviders, buildNodeAppProviders} from './platform/node';
+import {buildReflector, buildNodeProviders, buildNodeAppProviders, NODE_PROVIDERS} from './platform/node';
 import {parseDocument, parseFragment, serializeDocument} from './platform/document';
 import {createPrebootCode} from './ng_preboot';
 import {arrayFlattenTree} from './helper';
@@ -18,8 +28,8 @@ export interface BootloaderConfig {
   platformProviders?: Array<any>;
   providers?: Array<any>;
   componentProviders?: Array<any>;
-  component?: any;
-  directives?: Array<any>;
+  appComponentType?: Type;
+  directives?: Array<Type>;
   preboot?: boolean | any;
   precache?: boolean;
   primeCache?: boolean;
@@ -71,23 +81,28 @@ export class Bootloader {
 
   platform(providers?: any): PlatformRef {
     let pro = providers || this._config.platformProviders;
-    return platform(buildNodeProviders(pro));
+    var platform = createPlatform(ReflectiveInjector.resolveAndCreate(buildNodeProviders(pro)))
+    return platform;
+  }
+
+  appInjector(document?: any, providers?: any): ReflectiveInjector {
+    let doc = this.document(document);
+    let pro = providers || this._config.providers;
+    return ReflectiveInjector.resolveAndCreate(buildNodeAppProviders(pro), this.platformRef.injector);
   }
 
   application(document?: any, providers?: any): ApplicationRef {
-    let doc = this.document(document);
-    let pro = providers || this._config.providers;
-    return this.platformRef.application(buildNodeAppProviders(doc, pro));
+    return this.appInjector(document,providers).get(ApplicationRef)
   }
 
-  bootstrap(Component?: any | Array<any>, componentProviders?: Array<any>): Promise<any> {
-    let component = Component || this._config.component;
-    let providers = componentProviders || this._config.componentProviders;
+  bootstrap(appComponentType?: Type, componentProviders?: Array<any>): Promise<any> {
+    let component = appComponentType || this._config.appComponentType;
     if (component) {
       // .then(waitRouter)); // fixed by checkStable()
-      return this.application().bootstrap(component, providers);
+      var appInjector = this.appInjector();
+      return coreLoadAndBootstrap(appInjector, component);
     } else {
-      return this._bootstrapAll(component, providers);
+      return this._bootstrapAll([component]);
     }
   }
 
@@ -96,8 +111,8 @@ export class Bootloader {
       .then(Bootloader.applicationRefToString);
   }
 
-  serializeApplication(Component?: any | Array<any>, componentProviders?: Array<any>): Promise<any> {
-    let component = Component || this._config.component;
+  serializeApplication(Components?: Array<Type>, componentProviders?: Array<any>): Promise<any> {
+    let component = Components || [this._config.appComponentType];
     let providers = componentProviders || this._config.componentProviders;
     let ngDoCheck = this._config.ngDoCheck || null;
     let maxZoneTurns = Math.max(this._config.maxZoneTurns || 2000, 1);
@@ -246,23 +261,24 @@ export class Bootloader {
   }
 
 
-  _bootstrapAll(Components?: Array<any>, componentProviders?: Array<any>): Promise<Array<any>> {
+  _bootstrapAll(Components?: Array<Type>, componentProviders?: Array<any>): Promise<Array<any>> {
     let components = Components || this._config.directives;
     let providers = componentProviders || this._config.componentProviders;
     // .then(waitRouter)); // fixed by checkStable()
-    let directives = components.map(component => this.application().bootstrap(component, providers));
+    let directives = components.map(component => coreLoadAndBootstrap(this.appInjector(null, providers), component));
     return Promise.all(directives);
   }
 
-  _applicationAll(Components?: Array<any>, componentProviders?: Array<any>): Promise<Array<any>> {
+  _applicationAll(Components?: Array<Type>, componentProviders?: Array<any>): Promise<Array<any>> {
     let components = Components || this._config.directives;
     let providers = componentProviders || this._config.componentProviders || [];
     let doc = this.document(this._config.template || this._config.document);
 
     let directives = components.map(component => {
-      var applicationRef = this.application(doc);
+      var appInjector = this.appInjector(doc, providers);
+      var applicationRef = appInjector.get(ApplicationRef);
       // .then(waitRouter)); // fixed by checkStable()
-      let compRef = applicationRef.bootstrap(component, providers);
+      let compRef = coreLoadAndBootstrap(appInjector, component);
       return compRef.then(componentRef => ({ applicationRef, componentRef }));
     });
     return Promise.all(directives);

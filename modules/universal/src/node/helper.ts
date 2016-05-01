@@ -1,4 +1,4 @@
-import {DirectiveResolver} from 'angular2/core';
+import {DirectiveResolver} from 'angular2/compiler';
 var directiveResolver: any = new DirectiveResolver();
 
 export function serverDirectiveResolver(componentType: any): any {

@@ -11,8 +11,7 @@ import {AnimationBuilder} from 'angular2/src/animate/animation_builder';
 // Core
 import {Testability} from 'angular2/src/core/testability/testability';
 import {ReflectionCapabilities} from 'angular2/src/core/reflection/reflection_capabilities';
-import {DirectiveResolver} from 'angular2/src/core/linker/directive_resolver';
-import {APP_COMPONENT} from 'angular2/src/core/application_tokens';
+import {DirectiveResolver} from 'angular2/compiler';
 import {
   provide,
   Provider,
@@ -22,7 +21,9 @@ import {
   PLATFORM_PIPES,
   APPLICATION_COMMON_PROVIDERS,
   ComponentRef,
-  platform,
+  createPlatform,
+  ReflectiveInjector,
+  coreLoadAndBootstrap,
   reflector,
   ExceptionHandler,
   Renderer,
@@ -146,9 +147,9 @@ export function bootstrap(
     ...(isPresent(customComponentProviders) ? customComponentProviders : [])
   ];
 
-  return platform(NODE_PROVIDERS)
-    .application(appProviders)
-    .bootstrap(appComponentType, componentProviders);
+  var platform = createPlatform(ReflectiveInjector.resolveAndCreate(NODE_PROVIDERS))
+  var appInjector = ReflectiveInjector.resolveAndCreate([appProviders, componentProviders], platform.injector);
+  return coreLoadAndBootstrap(appInjector, appComponentType);
 }
 
 
